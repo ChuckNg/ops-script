@@ -1,0 +1,130 @@
+#!/bin/bash
+# Author: Chuck Ng
+# Date:   2019/1/17
+
+PYENV_GIT="https://github.com/yyuu/pyenv.git"
+
+PYTHON_DEFAULT_VERSION="3.6.5"
+PYTHON_MODULES=(
+django
+requests
+aliyun-python-sdk-core-v3
+)
+
+DJANGO_DEFAULT_FILE=(.gitignore README.rst requirements.txt)
+
+
+# Python相关lib安装
+function pre_install(){
+    echo ">>> Pre-requisite install..."
+
+    DISTRIBUTED_ID=`lsb_release -i | awk '{print $NF}'`
+    case $DISTRIBUTED_ID in 
+        Ubuntu)
+            apt-get update && \
+            apt-get install -y libssl-dev zlib1g-dev \
+            libreadline-dev libsqlite3-dev libbz2-dev xz-utils
+        ;;
+        Centos)
+            yum install -y zlib zlib-devel
+        ;;
+        *)
+            echo -e ">>> Linux Distribution not supported!\n"
+            exit 1
+        ;;
+    esac
+    echo -e ">>> Pre-requisite installed.\n"
+}
+
+# pyenv安装
+function pyenv_install(){
+    echo ">>> Install pyenv..."
+    if [ ! -d ~/.pyenv ];then
+        git clone $PYENV_GIT ~/.pyenv
+   
+        echo -e 'export PATH=$PATH:~/.pyenv/bin
+export PYENV_ROOT=~/.pyenv
+eval "$(pyenv init -)"' >> ~/.bashrc
+    fi
+    source ~/.bashrc
+    echo -e ">>> Done with pyenv installation...\n"
+}
+
+# Python安装
+function python_install(){
+    source ~/.bashrc
+    pyenv versions
+    if [ ! -z $1 ];then
+        PYTHON_VERSION=$1
+    else
+        PYTHON_VERSION=$PYTHON_DEFAULT_VERSION
+    fi
+
+    echo -e ">>> Install Python-$PYTHON_VERSION...\n"
+    pyenv install $PYTHON_VERSION
+    pyenv global $PYTHON_VERSION
+    echo -e ">> Installed `python -V`.\n"
+    
+}
+
+# 相关模块pip安装
+function post_install(){
+   echo -e ">>> Install following modules:\n${PYTHON_MODULES[@]}"
+   if [[ -e `which pip` && ! -z `pip -V | grep $PYTHON_VERSION` ]];then
+       pip install ${PYTHON_MODULES[@]} && \
+       echo -e ">>> Installed python modules:${PYTHON_MODULES[@]}.\n"
+   else
+       echo -e ">>> pip command not found...\n"
+       exit 1
+   fi
+}
+
+# Django项目初始化
+function django_project_init(){
+    if [ ! -e `which django-admin` ];then
+        echo -e ">>> django-admin bin not found!"
+        exit 1
+    fi
+
+    PROJECT_NAME=$1
+    DJANGO_PROJECT_DIR=$2
+    if [ -d $DJANGO_PROJECT_DIR ];then
+        echo -e ">>> $DJANGO_PROJECT_DIR has already exists!"
+        exit 1
+    fi
+    echo -e ">>> Init Django project $PROJECT_NAME...\n"
+
+    mkdir -p $DJANGO_PROJECT_DIR/{etc,log,templates} && \
+    cd $DJANGO_PROJECT_DIR/ && \
+    django-admin startproject $PROJECT_NAME && \
+    mv $PROJECT_NAME src && \
+    touch ${DJANGO_DEFAULT_FILE[@]} && \
+    echo -e "*.swp\n*.log\n\n*.json\n*.conf\n\n*.pyc" > .gitignore
+
+    echo -e ">>> Inited project: $PROJECT_NAME in directory: $DJANGO_PROJECT_DIR"
+    ls -alt ./
+}
+
+# Main function
+case $1 in 
+    install)
+        pre_install
+        pyenv_install
+        python_install $2
+        post_install
+    ;;
+    django-init)
+        django_project_init $2 $4
+    ;;
+    script-init)
+        # Todo: add function here.
+    ;;
+    *)
+        echo -e "
+Script for install and init Python project.
+The option should be:
+    install [version]
+    django-init [project] -d [project_dir]
+    script-init"
+    ;;
+esac
